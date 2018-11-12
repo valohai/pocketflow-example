@@ -1,0 +1,74 @@
+- step:
+    name: Train
+    image: tensorflow/tensorflow:1.9.0-devel-gpu-py3
+    inputs:
+        - name: training-set-images
+          default: https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz
+        - name: pretrained-uncompressed-model
+          default: https://api.ai.tencent.com/pocketflow/models_resnet_20_at_cifar_10.tar.gz
+    parameters:
+      - name: dcp_prune_ratio
+        type: float
+        pass-as: --dcp_prune_ratio={v}
+        description: Size of model after compression (0.9 = 90%)
+        default: 0.9
+      - name: dcp_nb_iters_layer
+        type: integer
+        pass-as: --dcp_nb_iters_layer={v}
+        description: Pruning iterations per layer (for dish-chn-pruned only)
+        default: 10
+      - name: dcp_nb_iters_block
+        type: integer
+        pass-as: --dcp_nb_iters_block={v}
+        description: Pruning iterations per block (for dish-chn-pruned only)
+        default: 10
+      - name: nb_epochs_rat
+        type: float
+        pass-as: --nb_epochs_rat={v}
+        description: How much retraining after compression
+        default: 0.01
+      - name: samples
+        type: integer
+        pass-as: --nb_smpls_eval={v}
+        description: How many samples total for evaluation
+        default: 512
+      - name: batch_size
+        type: integer
+        pass-as: --batch_size={v}
+        description: How many samples per batch
+        default: 16
+    command:
+        - wget -q https://github.com/Tencent/PocketFlow/archive/82244d9db61f0cf6f28c3d2e31f94b057ce6e623.tar.gz # This equals to fetching/cloning to specific commit (which GitHub doesn't allow)
+        - tar xz --strip-components=1 -C /valohai/repository -f 82244d9db61f0cf6f28c3d2e31f94b057ce6e623.tar.gz
+        - tar -xvzf /valohai/inputs/training-set-images/cifar-10-binary.tar.gz -C /valohai/inputs/training-set-images
+        - tar -xvzf /valohai/inputs/pretrained-uncompressed-model/models_resnet_20_at_cifar_10.tar.gz -C /valohai/repository
+        - python ./train.py --save_step 1000000 --learner=dis-chn-pruned --data_dir_local /valohai/inputs/training-set-images/cifar-10-batches-bin {parameters}
+        - export DATETIME=$(date '+%Y-%m-%d-%H-%M-%S')
+        - tar -cvzf compressed-$DATETIME.tgz ./models_dcp/*
+        - mv compressed-$DATETIME.tgz /valohai/outputs/
+
+- step:
+    name: Evaluate
+    image: tensorflow/tensorflow:1.9.0-devel-gpu-py3
+    inputs:
+        - name: training-set-images
+          default: https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz
+        - name: pretrained-uncompressed-model
+          default: https://api.ai.tencent.com/pocketflow/models_resnet_20_at_cifar_10.tar.gz
+    parameters:
+      - name: samples
+        type: integer
+        pass-as: --nb_smpls_eval={v}
+        description: How many samples total
+        default: 512
+      - name: batch_size
+        type: integer
+        pass-as: --batch_size={v}
+        description: How many samples per batch
+        default: 16
+    command:
+        - wget -q https://github.com/Tencent/PocketFlow/archive/82244d9db61f0cf6f28c3d2e31f94b057ce6e623.tar.gz # This equals to fetching/cloning to specific commit (which GitHub doesn't allow)
+        - tar xz --strip-components=1 -C /valohai/repository -f 82244d9db61f0cf6f28c3d2e31f94b057ce6e623.tar.gz
+        - tar -xvzf /valohai/inputs/training-set-images/cifar-10-binary.tar.gz -C /valohai/inputs/training-set-images
+        - tar -xvzf /valohai/inputs/pretrained-uncompressed-model/models_resnet_20_at_cifar_10.tar.gz -C /valohai/repository
+        - python ./evaluate.py --data_dir_local /valohai/inputs/training-set-images/cifar-10-batches-bin {parameters}
